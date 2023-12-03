@@ -2,19 +2,19 @@ import java.io.*;
 import java.net.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class ChatServer {
+public class FileServer {
     private int nPort;
     private ServerSocket serverSocket;
     private final CopyOnWriteArrayList<ClientHandler> clients = new CopyOnWriteArrayList<>();
 
-    public ChatServer(int nPort){
+    public FileServer(int nPort) {
         this.nPort = nPort;
     }
 
     public void startServer() {
-
-        try{
+        try {
             serverSocket = new ServerSocket(nPort);
+            System.out.println("Server: Listening on port " + nPort + "...");
 
             while (true) {
                 Socket socket = serverSocket.accept();
@@ -37,13 +37,18 @@ public class ChatServer {
         }
     }
 
+    public void removeClient(ClientHandler clientHandler) {
+        clients.remove(clientHandler);
+    }
+
     private class ClientHandler implements Runnable {
         private Socket socket;
         private DataInputStream input;
         private DataOutputStream output;
-        private ChatServer server;
+        private FileServer server;
+        private String handle;
 
-        public ClientHandler(Socket socket, ChatServer server) {
+        public ClientHandler(Socket socket, FileServer server) {
             this.socket = socket;
             this.server = server;
             try {
@@ -60,15 +65,15 @@ public class ChatServer {
             try {
                 while (true) {
                     String message = input.readUTF();
-                    System.out.println("Received from " + socket.getRemoteSocketAddress() + ": " + message);
-                    server.broadcastMessage(message, this);
+                    System.out.println("Received from " + handle + ": " + message);
+                    processCommand(message);
                 }
             } catch (IOException ex) {
-                System.out.println("Client " + socket.getRemoteSocketAddress() + " disconnected.");
+                System.out.println("Client " + handle + " disconnected.");
             } finally {
                 try {
                     socket.close();
-                    clients.remove(this);
+                    server.removeClient(this);
                 } catch (IOException ex) {
                     ex.printStackTrace();
                 }
@@ -83,19 +88,36 @@ public class ChatServer {
                 ex.printStackTrace();
             }
         }
+
+        private void processCommand(String message) {
+            String[] parts = message.split(" ");
+            String command = parts[0];
+
+            switch (command.toLowerCase()) {
+                case "/register":
+                    if (parts.length != 2) {
+                        sendMessage("Error: Registration failed. Handle or alias already exists.");
+                        return;
+                    }
+                    handle = parts[1];
+                    sendMessage("Welcome " + handle + "!");
+                    break;
+                // Add other command processing logic as needed
+                default:
+                    server.broadcastMessage(message, this);
+                    break;
+            }
+        }
     }
 
     public static void main(String[] args) {
-
         if (args.length < 1) {
-            System.out.println("Usage: java ChatServer <port>");
-                return;
-            }
+            System.out.println("Usage: java FileServer <port>");
+            return;
+        }
 
-            int nPort = Integer.parseInt(args[0]);
-            System.out.println("Server: Listening on port " + nPort + "...");
-
-        ChatServer server = new ChatServer(nPort);
+        int nPort = Integer.parseInt(args[0]);
+        FileServer server = new FileServer(nPort);
         server.startServer();
     }
 }
