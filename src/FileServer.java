@@ -92,7 +92,7 @@ public class FileServer {
         private void processCommand(String message) {
             String[] parts = message.split(" ");
             String command = parts[0];
-
+            try{
             switch (command.toLowerCase()) {
                 case "/register":
                     if (parts.length != 2) {
@@ -102,13 +102,48 @@ public class FileServer {
                     handle = parts[1];
                     sendMessage("Welcome " + handle + "!");
                     break;
-                // Add other command processing logic as needed
+                
+
+                case "/store": 
+                    if (parts.length !=3){
+                        sendMessage("Error: Incorrect command format format for /store");
+                        return;
+                    }
+                    String filename = parts[1];
+                    long fileSize = Long.parseLong(parts[2]);
+                    receiveFile(filename, fileSize);
+                    break;
+
+
                 default:
                     server.broadcastMessage(message, this);
                     break;
+            }} catch (IOException e){
+                System.out.println("Error processing command: "+ e.getMessage());
+                e.printStackTrace();
             }
         }
+
+        private void receiveFile(String filename, long fileSize) throws IOException{
+        File file = new File(filename);
+
+        FileOutputStream fos = new FileOutputStream(file);
+        byte[] buffer = new byte[4096];
+        int read = 0;
+        long totalRead = 0;
+
+        while(totalRead < fileSize){
+            read = this.input.read(buffer);
+            totalRead += read;
+            fos.write(buffer, 0, read);
+        }
+        fos.close();
+        sendMessage("File "+ filename + " received successfully");
     }
+
+    }
+
+    
 
     public static void main(String[] args) {
         if (args.length < 1) {
