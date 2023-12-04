@@ -1,6 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.io.File;
 
 public class FileClient {
 
@@ -9,7 +8,7 @@ public class FileClient {
     private DataInputStream serverInput;
     private DataOutputStream serverOutput;
     private String handle;
-    File fileToStore; 
+    File fileToStore;
 
     private boolean isConnected = false;
 
@@ -23,11 +22,7 @@ public class FileClient {
                 System.out.print("> ");
                 String input = consoleReader.readLine();
 
-                if (input.equals("/?")) {
-                    showCommands();
-                } else {
-                    parseCommand(input);
-                }
+                parseCommand(input);
 
             }
         } catch (IOException e) {
@@ -35,39 +30,31 @@ public class FileClient {
         }
     }
 
-    private void showCommands() {
-        System.out.println("Available commands:");
-        System.out.println("/join <server_ip_add> <port> /t - Connect to the server");
-        System.out.println("/leave /t - Disconnect from the server");
-        System.out.println("/register <handle> /t - Register a unique handle or alias");
-        System.out.println("/store <filename> /t - Send file to server");
-        System.out.println("/dir /t - Request directory file list from the server");
-        System.out.println("/get <filename> /t - Fetch a file from the server");
-    }
-
     private void parseCommand(String input) throws IOException {
         String[] parts = input.split(" ");
         String command = parts[0];
-
-        if (!isConnected && !input.startsWith("/join")) {
-            System.out.println("You must connect to a server first using /join.");
-            return;
-        }
 
         switch (command.toLowerCase()) {
             case "/?":
                 showCommands();
                 break;
+
             case "/join":
+                if (!isConnected) {
+                    System.out.println("You must connect to a server first using /join.");
+                    return;
+                }
                 if (parts.length != 3) {
                     System.out.println("Input Syntax: /join <server_ip_add> <port>");
                     return;
                 }
                 connectToServer(parts[1], Integer.parseInt(parts[2]));
                 break;
+
             case "/leave":
                 leaveServer();
                 break;
+
             case "/register":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /register <handle>");
@@ -75,6 +62,7 @@ public class FileClient {
                 }
                 registerHandle(parts[1]);
                 break;
+
             case "/store":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /store <filename>");
@@ -82,9 +70,11 @@ public class FileClient {
                 }
                 storeFile(parts[1]);
                 break;
+
             case "/dir":
                 requestDirectory();
                 break;
+
             case "/get":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /get <filename>");
@@ -92,11 +82,22 @@ public class FileClient {
                 }
                 fetchFile(parts[1]);
                 break;
+
             default:
                 // sendMessage(input);
                 System.out.println("Unknown command.");
                 break;
         }
+    }
+
+    private void showCommands() {
+        System.out.println("Available commands:");
+        System.out.println("/join <server_ip_add> <port> - Connect to the server");
+        System.out.println("/leave - Disconnect from the server");
+        System.out.println("/register <handle> - Register a unique handle or alias");
+        System.out.println("/store <filename> - Send file to server");
+        System.out.println("/dir - Request directory file list from the server");
+        System.out.println("/get <filename> - Fetch a file from the server");
     }
 
     private void connectToServer(String ip, int port) {
@@ -141,43 +142,72 @@ public class FileClient {
     }
 
     private void storeFile(String filename) {
-        try{
+        try {
             File file = new File(filename);
 
-            if(!file.exists()){
+            if (!file.exists()) {
                 System.out.println("File does not exist.");
                 return;
             }
 
-            sendMessage("/store "+ file.getName()+" "+ file.length());
-            sendFile(file);
-        }catch (IOException e){
-            System.out.println("Error: "+ e.getMessage());
+            sendMessage("/store " + file.getName() + " " + file.length());
+
+            FileInputStream fis = new FileInputStream(file);
+            byte[] buffer = new byte[4096];
+            int read = 0;
+            while ((read = fis.read(buffer)) > 0) {
+                serverOutput.write(buffer, 0, read);
+            }
+            fis.close();
+            System.out.println("File sent successfully: " + file.getName());
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
             e.printStackTrace();
         }
-    }
-
-    private void sendFile(File file) throws IOException{
-        FileInputStream fis = new FileInputStream(file);
-        byte[] buffer = new byte[4096];
-        int read = 0;
-        while((read = fis.read(buffer)) > 0){
-            serverOutput.write(buffer, 0, read);
-        }
-        fis.close();
-        System.out.println("File sent successfully: " + file.getName());
     }
 
     private void requestDirectory() {
         // Implement directory request logic here
         // Request the directory list from the server
         sendMessage("/dir");
+        String response = receiveMessage();
+        System.out.println(response);
     }
 
     private void fetchFile(String filename) {
         // Implement file fetching logic here
         // Request the specified file from the server
         sendMessage("/get " + filename);
+        String response = receiveMessage();
+        if (!response.startsWith("Sending")) {
+            System.out.println("File does not exist.");
+            return;
+        }
+        try {
+            String[] parts = response.split(" ");
+            long fileSize = Long.parseLong(parts[2]);
+            receiveFile(filename, fileSize);
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void receiveFile(String filename, long fileSize) throws IOException {
+        File file = new File(filename);
+
+        FileOutputStream fos = new FileOutputStream(file);
+        byte[] buffer = new byte[4096];
+        int read = 0;
+        long totalRead = 0;
+
+        while (totalRead < fileSize) {
+            read = serverInput.read(buffer);
+            totalRead += read;
+            fos.write(buffer, 0, read);
+        }
+        fos.close();
+        sendMessage("File " + filename + " received successfully");
     }
 
     private void sendMessage(String message) {
@@ -202,4 +232,3 @@ public class FileClient {
         client.start();
     }
 }
-

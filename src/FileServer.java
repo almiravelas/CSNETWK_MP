@@ -92,58 +92,111 @@ public class FileServer {
         private void processCommand(String message) {
             String[] parts = message.split(" ");
             String command = parts[0];
-            try{
-            switch (command.toLowerCase()) {
-                case "/register":
-                    if (parts.length != 2) {
-                        sendMessage("Error: Registration failed. Handle or alias already exists.");
-                        return;
-                    }
-                    handle = parts[1];
-                    sendMessage("Welcome " + handle + "!");
-                    break;
-                
+            try {
+                switch (command.toLowerCase()) {
+                    case "/register":
+                        if (parts.length != 2) {
+                            sendMessage("Error: Incorrect command format for /register");
+                            return;
+                        }
+                        for (ClientHandler client : clients) {
+                            if (client.handle.equals(parts[1])) {
+                                sendMessage("Error: Registration failed. Handle or alias already exists.");
+                                return;
+                            }
+                        }
+                        this.handle = parts[1];
+                        sendMessage("Welcome " + this.handle + "!");
+                        break;
 
-                case "/store": 
-                    if (parts.length !=3){
-                        sendMessage("Error: Incorrect command format format for /store");
-                        return;
-                    }
-                    String filename = parts[1];
-                    long fileSize = Long.parseLong(parts[2]);
-                    receiveFile(filename, fileSize);
-                    break;
+                    case "/store":
+                        if (parts.length != 3) {
+                            sendMessage("Error: Incorrect command format for /store");
+                            return;
+                        }
+                        String filename = parts[1];
+                        long fileSize = Long.parseLong(parts[2]);
+                        receiveFile(filename, fileSize);
+                        break;
 
+                    case "/dir":
+                        if (parts.length != 1) {
+                            sendMessage("Error: Incorrect command format for /dir");
+                            return;
+                        }
+                        sendDirectory();
+                        break;
 
-                default:
-                    server.broadcastMessage(message, this);
-                    break;
-            }} catch (IOException e){
-                System.out.println("Error processing command: "+ e.getMessage());
+                    case "/get":
+                        if (parts.length != 2) {
+                            sendMessage("Error: Incorrect command format for /get");
+                            return;
+                        }
+                        sendFile(parts[1]);
+                        break;
+
+                    default:
+                        server.broadcastMessage(message, this);
+                        break;
+                }
+            } catch (IOException e) {
+                System.out.println("Error processing command: " + e.getMessage());
                 e.printStackTrace();
             }
         }
 
-        private void receiveFile(String filename, long fileSize) throws IOException{
-        File file = new File(filename);
+        private void receiveFile(String filename, long fileSize) throws IOException {
+            File file = new File(filename);
 
-        FileOutputStream fos = new FileOutputStream(file);
-        byte[] buffer = new byte[4096];
-        int read = 0;
-        long totalRead = 0;
+            FileOutputStream fos = new FileOutputStream(file);
+            byte[] buffer = new byte[4096];
+            int read = 0;
+            long totalRead = 0;
 
-        while(totalRead < fileSize){
-            read = this.input.read(buffer);
-            totalRead += read;
-            fos.write(buffer, 0, read);
+            while (totalRead < fileSize) {
+                read = this.input.read(buffer);
+                totalRead += read;
+                fos.write(buffer, 0, read);
+            }
+            fos.close();
+            sendMessage("File " + filename + " received successfully");
         }
-        fos.close();
-        sendMessage("File "+ filename + " received successfully");
-    }
 
-    }
+        private void sendDirectory() {
+            File serverDirectory = new File(".");
+            File[] files = serverDirectory.listFiles();
 
-    
+            StringBuilder listing = new StringBuilder("Directory Listing:\n");
+            for (File file : files)
+                listing.append(file.getName()).append("\n");
+
+            sendMessage(listing.toString());
+        }
+
+        private void sendFile(String filename) {
+            try {
+                File file = new File(filename);
+
+                if (!file.exists()) {
+                    sendMessage("Error: File does not exist.");
+                    return;
+                }
+
+                sendMessage("Sending " + file.getName() + " " + file.length());
+
+                FileInputStream fis = new FileInputStream(file);
+                byte[] buffer = new byte[4096];
+                int read = 0;
+                while ((read = fis.read(buffer)) > 0) {
+                    this.output.write(buffer, 0, read);
+                }
+                fis.close();
+            } catch (IOException e) {
+                System.out.println("Error: " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
 
     public static void main(String[] args) {
         if (args.length < 1) {
