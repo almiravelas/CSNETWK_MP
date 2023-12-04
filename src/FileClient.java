@@ -1,5 +1,6 @@
 import java.io.*;
 import java.net.*;
+import java.io.File;
 
 public class FileClient {
 
@@ -8,6 +9,7 @@ public class FileClient {
     private DataInputStream serverInput;
     private DataOutputStream serverOutput;
     private String handle;
+    File fileToStore; 
 
     private boolean isConnected = false;
 
@@ -139,9 +141,31 @@ public class FileClient {
     }
 
     private void storeFile(String filename) {
-        // Implement file storage logic here
-        // Send the file to the server
-        sendMessage("/store " + filename);
+        try{
+            File file = new File(filename);
+
+            if(!file.exists()){
+                System.out.println("File does not exist.");
+                return;
+            }
+
+            sendMessage("/store "+ file.getName()+" "+ file.length());
+            sendFile(file);
+        }catch (IOException e){
+            System.out.println("Error: "+ e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void sendFile(File file) throws IOException{
+        FileInputStream fis = new FileInputStream(file);
+        byte[] buffer = new byte[4096];
+        int read = 0;
+        while((read = fis.read(buffer)) > 0){
+            serverOutput.write(buffer, 0, read);
+        }
+        fis.close();
+        System.out.println("File sent successfully: " + file.getName());
     }
 
     private void requestDirectory() {
@@ -178,3 +202,4 @@ public class FileClient {
         client.start();
     }
 }
+
