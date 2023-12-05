@@ -6,9 +6,17 @@ public class FileServer {
     private int nPort;
     private ServerSocket serverSocket;
     private final CopyOnWriteArrayList<ClientHandler> clients = new CopyOnWriteArrayList<>();
+    private String serverDirectory;
 
-    public FileServer(int nPort) {
+    public FileServer(int nPort, String serverDirectory) {
         this.nPort = nPort;
+        this.serverDirectory = serverDirectory;
+        File dir = new File(serverDirectory);
+        if (!dir.exists()) dir.mkdirs(); // Create directory if it doesn't exist
+    }
+
+    public String getServerDirectory() {
+        return serverDirectory;
     }
 
     public void startServer() {
@@ -101,6 +109,7 @@ public class FileServer {
                     }
                     handle = parts[1];
                     sendMessage("Welcome " + handle + "!");
+
                     break;
                 
 
@@ -114,45 +123,112 @@ public class FileServer {
                     receiveFile(filename, fileSize);
                     break;
 
+                    case "/dir":
+                        if (parts.length != 1) {
+                            sendMessage("Error: Incorrect command format for /dir");
+                            return;
+                        }
+                        sendDirectory();
+                        break;
+
+                    case "/get":
+                        if (parts.length != 2) {
+                            sendMessage("Error: Incorrect command format for /get");
+                            return;
+                        }
+                        sendFile(parts[1]);
+                        break;
 
                 default:
                     server.broadcastMessage(message, this);
                     break;
             }} catch (IOException e){
-                System.out.println("Error processing command: "+ e.getMessage());
+                System.out.println("Error: Command not found.\n Error processing command: "+ e.getMessage());
                 e.printStackTrace();
             }
         }
 
-        private void receiveFile(String filename, long fileSize) throws IOException{
-        File file = new File(filename);
-
-        FileOutputStream fos = new FileOutputStream(file);
-        byte[] buffer = new byte[4096];
-        int read = 0;
-        long totalRead = 0;
-
-        while(totalRead < fileSize){
-            read = this.input.read(buffer);
-            totalRead += read;
-            fos.write(buffer, 0, read);
+        private void receiveFile(String filename, long fileSize) throws IOException {
+            File file = new File(serverDirectory, filename);
+        
+            FileOutputStream fos = new FileOutputStream(file);
+            byte[] buffer = new byte[4096];
+            int read = 0;
+            long totalRead = 0;
+        
+            try {
+                while (totalRead < fileSize) {
+                    read = input.read(buffer);
+                    if (read == -1) {
+                        throw new IOException("Unexpected end of stream");
+                    }
+                    totalRead += read;
+                    fos.write(buffer, 0, read);
+                }
+            } finally {
+                fos.close(); // Close the FileOutputStream
+            }
+        
+            sendMessage("File received successfully"); // Signal client
         }
-        fos.close();
-        sendMessage("File "+ filename + " received successfully");
-    }
+        
 
+    private void sendDirectory() {
+        File serverDir = new File(serverDirectory);
+        File[] files = serverDir.listFiles();
+    
+        StringBuilder listing = new StringBuilder("Directory Listing:\n");
+        if (files != null) {
+            for (File file : files) {
+                listing.append(file.getName()).append("\n");
+            }
+        } else {
+            listing.append("Server directory is empty.");
+        }
+    
+        sendMessage(listing.toString());
     }
+    
+
+    private void sendFile(String filename) {
+        try {
+            File file = new File(serverDirectory, filename);
+    
+            if (!file.exists()) {
+                sendMessage("Error: File does not exist on the server.");
+                return;
+            }
+    
+            sendMessage("Sending " + filename + " " + file.length());
+    
+            FileInputStream fis = new FileInputStream(file);
+            byte[] buffer = new byte[4096];
+            int read = 0;
+            while ((read = fis.read(buffer)) > 0) {
+                this.output.write(buffer, 0, read);
+            }
+            fis.close();
+            sendMessage("File transfer complete.");
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+
+}
 
     
 
     public static void main(String[] args) {
         if (args.length < 1) {
-            System.out.println("Usage: java FileServer <port>");
+            System.out.println("Usage: java FileServer <port> <server_directory>");
             return;
         }
 
         int nPort = Integer.parseInt(args[0]);
-        FileServer server = new FileServer(nPort);
+        String serverDirectory = args[1];
+        FileServer server = new FileServer(nPort, serverDirectory);
         server.startServer();
     }
 }
