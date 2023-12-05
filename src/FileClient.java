@@ -1,8 +1,7 @@
 import java.io.*;
 import java.net.*;
-import java.io.File;
 
-public class FileClient {
+public class FileClient{
 
     private Socket socket;
     private BufferedReader consoleReader;
@@ -13,7 +12,12 @@ public class FileClient {
 
     private boolean isConnected = false;
 
-    public FileClient() {
+    private String clientDirectory;
+    private String serverDirectory;
+
+    public FileClient(String clientDirectory, String serverDirectory) {
+        this.clientDirectory = clientDirectory;
+        this.serverDirectory = serverDirectory;
         consoleReader = new BufferedReader(new InputStreamReader(System.in));
     }
 
@@ -58,6 +62,7 @@ public class FileClient {
             case "/?":
                 showCommands();
                 break;
+
             case "/join":
                 if (parts.length != 3) {
                     System.out.println("Input Syntax: /join <server_ip_add> <port>");
@@ -65,9 +70,11 @@ public class FileClient {
                 }
                 connectToServer(parts[1], Integer.parseInt(parts[2]));
                 break;
+
             case "/leave":
                 leaveServer();
                 break;
+
             case "/register":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /register <handle>");
@@ -75,6 +82,7 @@ public class FileClient {
                 }
                 registerHandle(parts[1]);
                 break;
+
             case "/store":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /store <filename>");
@@ -82,9 +90,11 @@ public class FileClient {
                 }
                 storeFile(parts[1]);
                 break;
+
             case "/dir":
                 requestDirectory();
                 break;
+
             case "/get":
                 if (parts.length != 2) {
                     System.out.println("Input Syntax: /get <filename>");
@@ -93,8 +103,7 @@ public class FileClient {
                 fetchFile(parts[1]);
                 break;
             default:
-                // sendMessage(input);
-                System.out.println("Unknown command.");
+                System.out.println("Error: Command not found.");
                 break;
         }
     }
@@ -105,24 +114,24 @@ public class FileClient {
             serverInput = new DataInputStream(socket.getInputStream());
             serverOutput = new DataOutputStream(socket.getOutputStream());
             System.out.println("Connected to server at " + ip + ":" + port);
+            System.out.println("Connection to the File Exchange Server is successful!");
             isConnected = true;
-            // other handling server communication
         } catch (IOException e) {
             System.out.println("Unable to connect to server: " + e.getMessage());
+            System.out.println("Error: Connection to the Server has failed! Please check IP Address and Port Number.");
             isConnected = false;
         }
     }
 
     private void leaveServer() {
-        // Implement server disconnection logic here
-        // Close the socket and perform any necessary cleanup
         try {
             if (socket != null) {
                 socket.close();
             }
-            System.out.println("Disconnected from the server.");
+            System.out.println("Connection closed. Thank you!");
             isConnected = false;
         } catch (IOException e) {
+            System.out.println("Error: Disconnection failed. Please connect to the server first.");
             e.printStackTrace();
         }
     }
@@ -142,7 +151,7 @@ public class FileClient {
 
     private void storeFile(String filename) {
         try{
-            File file = new File(filename);
+            File file = new File(clientDirectory, filename);
 
             if(!file.exists()){
                 System.out.println("File does not exist.");
@@ -151,8 +160,9 @@ public class FileClient {
 
             sendMessage("/store "+ file.getName()+" "+ file.length());
             sendFile(file);
+            // System.out.println(handle + "<" + new Timestamp(System.currentTimeMillis()) + ">: Uploaded " + filename);
         }catch (IOException e){
-            System.out.println("Error: "+ e.getMessage());
+            System.out.println("Error: File not found "+ e.getMessage());
             e.printStackTrace();
         }
     }
@@ -169,16 +179,57 @@ public class FileClient {
     }
 
     private void requestDirectory() {
-        // Implement directory request logic here
-        // Request the directory list from the server
         sendMessage("/dir");
+        String response = receiveMessage();
+        System.out.println(response);
     }
 
-    private void fetchFile(String filename) {
-        // Implement file fetching logic here
-        // Request the specified file from the server
+    public void fetchFile(String filename) {
         sendMessage("/get " + filename);
+        String response = receiveMessage();
+        if (!response.startsWith("Sending")) {
+            System.out.println("File does not exist on the server.");
+            return;
+        }
+        try {
+            String[] parts = response.split(" ");
+            long fileSize = Long.parseLong(parts[2]);
+            receiveFile(serverDirectory, filename, fileSize);
+        } catch (IOException e) {
+            System.out.println("Error: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
+    
+
+    private void receiveFile(String clientDirectory, String filename, long fileSize) throws IOException {
+        File file = new File(clientDirectory, filename);
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs(); // Create parent directories if they do not exist
+        }
+       
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            byte[] buffer = new byte[4096];
+            int read;
+            long totalRead = 0;
+            while (totalRead < fileSize) {
+                read = serverInput.read(buffer);
+                if (read == -1) {
+                    throw new IOException("Unexpected end of stream");
+                }
+                totalRead += read;
+                fos.write(buffer, 0, read);
+            }
+        }
+        // Wait for the completion signal
+        String completionSignal = receiveMessage();
+        if ("File transfer complete.".equals(completionSignal)) {
+            System.out.println("File received from Server: " + filename);
+        } else {
+            System.out.println("Error in file transfer.");
+        }
+    }
+    
 
     private void sendMessage(String message) {
         try {
@@ -198,8 +249,10 @@ public class FileClient {
     }
 
     public static void main(String[] args) {
-        FileClient client = new FileClient();
+        String clientDir = "C:\\Users\\63935\\OneDrive\\Desktop\\Test_netwk\\CLIENT";
+        String serverDir = "C:\\Users\\63935\\OneDrive\\Desktop\\Test_netwk\\SERVER";
+        FileClient client = new FileClient(clientDir, serverDir);
+
         client.start();
     }
 }
-
